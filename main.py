@@ -1,4 +1,5 @@
 from hw1_simulate import *
+import sys
 
 def main(rs_seed:int = 628):
   if (type(rs_seed) != int):

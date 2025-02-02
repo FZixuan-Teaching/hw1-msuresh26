@@ -1,6 +1,7 @@
 # %%
 import numpy as np
 from gurobipy import *
+import sys
 
 # %%
 ## Set variables that will be used throughout
@@ -81,6 +82,14 @@ def greedy_algorithm(P: dict, D: dict, patient_status: dict, donor_status: dict,
 
   ### Question 1.1(b).i: Code the greedy algorithm and append matches to the list 'matches'
   matches = []
+  for p in patients:
+    patient_btype = P[p]
+    for d in donors:
+      if donor_status[d] == False and D[d] in compatible_blood_type[patient_btype]:
+        patient_status[p] = True
+        donor_status[d] = True
+        matches.append((p, d))
+        break
 
   return matches
 
@@ -111,13 +120,20 @@ def mip(P: dict, D: dict, patient_status: dict, donor_status: dict, compatible_b
   sys.stdout.flush()
 
   # Variables: x_{i,j} binary representing whether patient i to donor j
-
+  x = model.addVars(len(patients), len(donors), vtype=GRB.BINARY, name = "x")
   # Constraint: Each patient can be matched to at most one (compatible) donor
-
+  for i, patient in enumerate(patients):
+    model.addConstr(sum(x[i, j] for j in range(len(donors))) <= 1, name = f"numPatientMatches_{i},{patient}")
   # Constraint: Each donor can be matched to at most one (compatible) patient
+  for j, donor in enumerate(donors):
+    model.addConstr(sum(x[i,j] for i in range(len(patients))) <=1, name = f"numDonorMatches_{j},{donor}")
 
+  for i, patient in enumerate(patients):
+    for j, donor in enumerate(donors):
+      if D[donor] not in compatible_blood_type[P[patient]]:
+        model.addConstr(x[i,j]==0, name=f"incompatible_bt_{patient},{donor}")
   # Objective: Maximize number of transplants
-
+  model.setObjective(sum(x[i,j] for i in range(len(patients)) for j in range(len(donors))), GRB.MAXIMIZE)
   # Optimize
   model.params.outputflag = 0
   model.optimize()
@@ -125,6 +141,11 @@ def mip(P: dict, D: dict, patient_status: dict, donor_status: dict, compatible_b
 
   # Set matches based on solution to model
   matches = []
+  if model.Status == GRB.OPTIMAL:
+    for i in range(len(patients)):
+      for j in range(len(donors)):
+        if x[i,j].x == 1:
+          matches.append((patients[i], donors[j]))
 
   return matches
 
@@ -324,8 +345,8 @@ def simulate(
   print('Total # patients matched: {:d}/{:d}'.format(sum(num_matched_by_type.values()), num_patients))
   print('Number of patients by type:', num_patients_by_type)
   print('Number of patients matched:', num_matched_by_type)
-  print('1.1(b)iii: Average number of patients (per blood type) matched per period:', "TODO for homework")
-  print('1.1(b)iv: Average time in system:', "TODO for homework")
+  print('1.1(b)iii: Average number of patients (per blood type) matched per period:', {bt: num_matched_by_type[bt] / num_periods for bt in num_matched_by_type})
+  print('1.1(b)iv: Average time in system:', sum(TIS.values())/ len(TIS))
   print('Average time in system (by type, weighed by num_patients):', {key : sum(TIS[i] for i in patients if patients[i] == key) / num_patients for key in compatible_blood_type.keys()})
   print('1.1(b)iv: Average time in system (by type, weighed by num_patients_by_type):', TIS_BT)
   print('1.1(b)v: Average proportion of patients matched per period by type:', "TODO for extra credit")
